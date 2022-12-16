@@ -76,7 +76,6 @@ export const signin = async (
     const User = (await UserInstance.findOne({
       where: { email: email },
     })) as unknown as UserAttributes;
-
     if (!User) {
       throw { code: 400, message: "Invalide Email or Password" };
     } else {
@@ -89,7 +88,7 @@ export const signin = async (
 
       if (!validPassword)
         throw { code: 400, message: "Invalide Email or Password" };
-
+      if (!User.verified) throw { code: 401, message: "Account Not Verified" };
       const payload: UserPayload = {
         id: User.id,
         email: User.email,
@@ -160,6 +159,8 @@ export const verifyUser = async (
     const { token } = req.params;
     if (token) {
       const verified = await verifySignature(token);
+      //check if user exits
+      if (!verified) throw { code: 400, message: "Please Register An Account" };
       if (verified) {
         await UserInstance.update(
           {
@@ -207,8 +208,8 @@ export const requestPassword = async (
       }
     );
     const template = await passworTemplate(user.userName, token);
-    let result = await sendEmail(user.email, "PASSWORD RESETE", template);
-    res.status(200).json({ status: "Email Sent!!", result });
+    await sendEmail(user.email, "PASSWORD RESETE", template);
+    res.status(200).json({ code: 200, signature: token });
   } catch (error) {
     next(error);
   }
@@ -242,13 +243,10 @@ export const changepassword = async (
         where: { id: id },
       }
     );
-
     res
       .status(201)
       .json({ code: 201, message: "password updated successfully" });
-    console.log(token, userPassword);
   } catch (error) {
-    console.log(error);
     next(error);
   }
 };

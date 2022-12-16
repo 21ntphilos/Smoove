@@ -5,10 +5,10 @@
   "author": "group smoove",
   "license": "MIT",
   "scripts": {
-    "dev": " STAGE=production nodemon src/index.ts",
+    "dev": " STAGE=testing nodemon src/index.ts",
     "test": "jest",
     "build": "tsc -p  tsconfig.json",
-    "start": "STAGE=production node dist/index.js",
+    "start": "node dist/index.js",
     "compile": "tsc -w"
   },
   "dependencies": {
