@@ -1,7 +1,7 @@
 import express from "express";
 import morgan from "morgan";
 import cors from "cors";
-// import { HttpError } from "http-errors";
+import { HttpError } from "http-errors";
 import * as dotenv from "dotenv";
 dotenv.config();
 const app = express();
@@ -10,17 +10,17 @@ const app = express();
 import { protect } from "./middleware/auth/auth";
 import { musicRouter, playlistRoute, usersRoute } from "./routes/index";
 import { errorHandler, errorRouterHandler } from "./handlers/errorHandler";
-// import { db } from "./config/db";
+import { db } from "./config/db";
 import { swaggerDocs } from "./utils/swagger";
 
 // ::::initalise database:::
-// db.sync({})
-//   .then(() => {
-//     console.log("connected to db");
-//   })
-//   .catch((error: HttpError) => {
-//     console.log(error);
-//   });
+db.sync({ force: true })
+  .then(() => {
+    console.log("connected to db");
+  })
+  .catch((error: HttpError) => {
+    console.log(error);
+  });
 // ::::globals::::
 app.use(morgan("dev"));
 app.use(express.json());
@@ -32,7 +32,6 @@ swaggerDocs(app);
 app.use("/api/music", protect, musicRouter);
 app.use("/api/playlist", protect, playlistRoute);
 app.use("/api/user", usersRoute);
-
 app.use(errorRouterHandler);
 app.use(errorHandler);
 

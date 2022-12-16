@@ -4,13 +4,17 @@ import { UserInstance } from "../../model";
 import {
   GenerateSalt,
   GenerateSignature,
-  // validatePassword,
   GeneratePassword,
   validatePassword,
+  verifySignature,
 } from "../../utils/auth-utils";
-import { UserAttributes } from "../../interface";
+import { UserAttributes, UserPayload } from "../../interface";
 import { v4 as UUID } from "uuid";
-
+import {
+  sendEmail,
+  welcomeEmail,
+  passworTemplate,
+} from "../../utils/notification";
 /* =============SIGNUP=======================. */
 
 export const Register = async (
@@ -42,7 +46,11 @@ export const Register = async (
         id: newUser.id,
         email: newUser.email,
         verified: newUser.verified,
+        isLoggedIn: false,
       });
+      const temp = welcomeEmail(userName, token);
+      await sendEmail(email, "Signup success", temp);
+
       return res.status(201).json({
         message:
           "User created successfully, check your email to activate you account",
@@ -50,7 +58,7 @@ export const Register = async (
       });
     } else {
       //User already exists
-      throw new Error("User already exists");
+      throw { code: 400, message: "User already exists" };
     }
   } catch (err) {
     next(err);
@@ -70,7 +78,7 @@ export const signin = async (
     })) as unknown as UserAttributes;
 
     if (!User) {
-      throw new Error("Invalid email or password");
+      throw { code: 400, message: "Invalide Email or Password" };
     } else {
       //validate password
       const validPassword = await validatePassword(
@@ -78,13 +86,15 @@ export const signin = async (
         User.password,
         User.salt
       );
-      console.log(validPassword);
-      if (!validPassword) throw new Error("Invalid email or password");
 
-      const payload = {
+      if (!validPassword)
+        throw { code: 400, message: "Invalide Email or Password" };
+
+      const payload: UserPayload = {
         id: User.id,
         email: User.email,
         verified: User.verified,
+        isLoggedIn: true,
       };
       const signature = await GenerateSignature(payload);
 
@@ -112,7 +122,7 @@ export const update = async (
       where: { id: id },
     })) as unknown as UserAttributes;
 
-    if (!User) throw new Error("not Authorised");
+    if (!User) throw { code: 401, message: "unAuthorised please Login" };
     const updatedUser = (await UserInstance.update(
       {
         firstName,
@@ -135,8 +145,110 @@ export const update = async (
         User,
       });
     }
-    throw new Error("Error occurred");
+    throw { code: 500, message: "Something went wrong" };
   } catch (error) {
+    next(error);
+  }
+};
+
+export const verifyUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { token } = req.params;
+    if (token) {
+      const verified = await verifySignature(token);
+      if (verified) {
+        await UserInstance.update(
+          {
+            verified: true,
+          },
+          {
+            where: { id: verified.id },
+          }
+        );
+        return res.status(200).json({
+          message: "User verified",
+        });
+      }
+    }
+    throw { code: 401, message: "Unauthorized" };
+  } catch (error) {
+    next(error);
+  }
+};
+/*================= forgot Password ================*/
+
+export const requestPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { email } = req.body;
+    const user = (await UserInstance.findOne({
+      where: { email: email },
+    })) as unknown as UserAttributes;
+    if (!user) throw { status: "Email is Incorect!!" };
+    const otp = await GenerateSalt();
+    let token = await GenerateSignature({
+      id: user.id,
+      email,
+      otp,
+    });
+    await UserInstance.update(
+      {
+        otp: otp,
+      },
+      {
+        where: { id: user.id },
+      }
+    );
+    const template = await passworTemplate(user.userName, token);
+    let result = await sendEmail(user.email, "PASSWORD RESETE", template);
+    res.status(200).json({ status: "Email Sent!!", result });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changepassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { token, password } = req.body;
+    const data = await verifySignature(token);
+    const { id, email, otp } = data;
+    const user = await UserInstance.findOne({
+      where: {
+        email: email,
+        otp,
+      },
+    });
+    if (!user) throw { code: 401, message: "Not Valide" };
+    const salt = await GenerateSalt();
+    const userPassword = await GeneratePassword(password, salt);
+    await UserInstance.update(
+      {
+        salt,
+        password: userPassword,
+        otp: "",
+      },
+      {
+        where: { id: id },
+      }
+    );
+
+    res
+      .status(201)
+      .json({ code: 201, message: "password updated successfully" });
+    console.log(token, userPassword);
+  } catch (error) {
+    console.log(error);
     next(error);
   }
 };
